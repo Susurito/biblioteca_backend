@@ -17,7 +17,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = '-_&+lsebec(whhw!%n@ww&1j=4-^j_if9x8$q778+99oz&!ms2'
 DEBUG = True
 
-ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", "0.0.0.0", "*"]
 
 # ---------------------------
 # APLICACIONES
@@ -96,11 +96,13 @@ TEMPLATES = [
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'biblioteca1_db',  # nombre de tu base
-        'USER': 'root',
-        'PASSWORD': '',        # en XAMPP suele estar vacío
-        'HOST': '127.0.0.1',
-        'PORT': '3306',        # cámbialo si usas 3307
+        # Lee credenciales de variables de entorno (Docker).
+        # Si no existen, usa los valores locales (XAMPP) como fallback.
+        'NAME': os.environ.get('DB_NAME', 'biblioteca1_db'),
+        'USER': os.environ.get('DB_USER', 'root'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+        'HOST': os.environ.get('DB_HOST', '127.0.0.1'),
+        'PORT': os.environ.get('DB_PORT', '3306'),
     }
 }
 

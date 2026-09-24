@@ -1,0 +1,38 @@
+# Archivos de Python compilados
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Entornos virtuales
+env/
+venv/
+.venv/
+
+# Variables de entorno sensibles
+.env
+.env.*
+
+# Archivos de Git
+.git/
+.gitignore
+
+# Base de datos local SQLite (si la hubiera)
+db.sqlite3
+
+# Archivos del SO
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Archivos de coverage/test
+htmlcov/
+.coverage
+.pytest_cache/
+
+# Archivos de IDEs
+.vscode/
+.idea/

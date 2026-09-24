@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+
+  # -----------------------------------------------
+  # Contenedor de Base de Datos MySQL
+  # -----------------------------------------------
+  db:
+    image: mysql:8.0
+    container_name: biblioteca_db
+    restart: always
+    environment:
+      MYSQL_DATABASE: biblioteca1_db
+      MYSQL_ROOT_PASSWORD: rootpassword
+    ports:
+      - "3307:3306"  # Mapeamos al 3307 del host porque XAMPP ya usa el 3306
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # -----------------------------------------------
+  # Contenedor del Backend (Django)
+  # -----------------------------------------------
+  web:
+    build: .
+    container_name: biblioteca_web
+    # Espera a que MySQL esté sano, luego migra y arranca el servidor
+    command: >
+      bash -c "python manage.py migrate &&
+               python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=db
+      - DB_NAME=biblioteca1_db
+      - DB_USER=root
+      - DB_PASSWORD=rootpassword
+      - DB_PORT=3306
+    depends_on:
+      db:
+        condition: service_healthy
+
+# Volumen persistente para los datos de MySQL
+volumes:
+  mysql_data:
