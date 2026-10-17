@@ -39,6 +39,8 @@ class Libros(models.Model):
     genero = models.CharField(max_length=100)
     detalles = models.TextField(blank=True, null=True)
     disponible = models.BooleanField(default=True)  # Disponible o No disponible
+    total_ejemplares = models.PositiveIntegerField(default=1, verbose_name="Total de ejemplares")
+    baja = models.BooleanField(default=False, verbose_name="Dado de baja")
 
     creado = models.DateTimeField(auto_now_add=True)
     actualizado = models.DateTimeField(auto_now=True)

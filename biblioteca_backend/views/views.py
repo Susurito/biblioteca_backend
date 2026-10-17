@@ -59,9 +59,20 @@ class AlumnoSerializer(serializers.ModelSerializer):
         return obj.prestamos.filter(devuelto=False, estado='aceptado').count()
 
 class LibrosSerializer(serializers.ModelSerializer):
+    total_ejemplares = serializers.IntegerField(required=False, default=1)
+    baja = serializers.BooleanField(required=False, default=False)
+    disponibles = serializers.SerializerMethodField()
+    prestados = serializers.SerializerMethodField()
+    estado_ejemplar = serializers.SerializerMethodField()
+
     class Meta:
         model = Libros
-        fields = ['id', 'isbn', 'titulo', 'autor', 'genero', 'detalles', 'disponible', 'creado', 'actualizado']
+        fields = [
+            'id', 'isbn', 'titulo', 'autor', 'genero', 'detalles',
+            'disponible', 'total_ejemplares', 'baja',
+            'disponibles', 'prestados', 'estado_ejemplar',
+            'creado', 'actualizado'
+        ]
 
     def validate_isbn(self, value):
         if value is not None:
@@ -69,6 +80,27 @@ class LibrosSerializer(serializers.ModelSerializer):
             if value == "":
                 return None
         return value
+
+    def get_prestados(self, obj):
+        try:
+            return obj.prestamos.filter(devuelto=False, estado='aceptado').count()
+        except Exception:
+            return 0
+
+    def get_disponibles(self, obj):
+        if getattr(obj, 'baja', False):
+            return 0
+        prestados = self.get_prestados(obj)
+        total = getattr(obj, 'total_ejemplares', 1) or 1
+        return max(0, total - prestados)
+
+    def get_estado_ejemplar(self, obj):
+        if getattr(obj, 'baja', False):
+            return 'dado_de_baja'
+        disponibles = self.get_disponibles(obj)
+        if disponibles <= 0 or not getattr(obj, 'disponible', True):
+            return 'sin_stock'
+        return 'disponible'
 
 class PrestamosSerializer(serializers.ModelSerializer):
     alumno_nombre = serializers.CharField(source='alumno.nombre', read_only=True)
@@ -202,6 +234,64 @@ class LibrosViewSet(viewsets.ModelViewSet):
         Acción para registrar libros restringida al rol de Administrador.
         """
         return self.create(request)
+
+    @action(detail=True, methods=['post'], url_path='dar-de-baja')
+    def dar_de_baja(self, request, pk=None):
+        libro = self.get_object()
+        if not self._es_administrador(request.user):
+            return Response(
+                {"error": "Acceso denegado. Solo administradores pueden dar de baja libros."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        libro.baja = True
+        libro.save()
+        serializer = self.get_serializer(libro)
+        return Response({
+            "message": f"El libro '{libro.titulo}' ha sido dado de baja exitosamente.",
+            "libro": serializer.data
+        })
+
+    @action(detail=True, methods=['post'], url_path='dar-de-alta')
+    def dar_de_alta(self, request, pk=None):
+        libro = self.get_object()
+        if not self._es_administrador(request.user):
+            return Response(
+                {"error": "Acceso denegado. Solo administradores pueden dar de alta libros."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        libro.baja = False
+        libro.save()
+        serializer = self.get_serializer(libro)
+        return Response({
+            "message": f"El libro '{libro.titulo}' ha sido reactivado exitosamente.",
+            "libro": serializer.data
+        })
+
+    @action(detail=False, methods=['get'], url_path='estadisticas')
+    def estadisticas(self, request):
+        libros = Libros.objects.all()
+        activos = 0
+        sin_stock = 0
+        dados_de_baja = 0
+
+        for l in libros:
+            if getattr(l, 'baja', False):
+                dados_de_baja += 1
+            else:
+                prestados = l.prestamos.filter(devuelto=False, estado='aceptado').count()
+                total = getattr(l, 'total_ejemplares', 1) or 1
+                disponibles = max(0, total - prestados)
+                if disponibles <= 0 or not l.disponible:
+                    sin_stock += 1
+                else:
+                    activos += 1
+
+        return Response({
+            "activos": activos,
+            "sin_stock": sin_stock,
+            "dados_de_baja": dados_de_baja,
+            "total": libros.count()
+        })
 
     @action(detail=False, methods=['get'], url_path='recomendados')
     def recomendados(self, request):

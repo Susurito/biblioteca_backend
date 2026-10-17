@@ -52,9 +52,20 @@ class AlumnoSerializer(serializers.ModelSerializer):
         return obj.prestamos.filter(devuelto=False, estado='aceptado').count()
 
 class LibrosSerializer(serializers.ModelSerializer):
+    total_ejemplares = serializers.IntegerField(required=False, default=1)
+    baja = serializers.BooleanField(required=False, default=False)
+    disponibles = serializers.SerializerMethodField()
+    prestados = serializers.SerializerMethodField()
+    estado_ejemplar = serializers.SerializerMethodField()
+
     class Meta:
         model = Libros
-        fields = ['id', 'isbn', 'titulo', 'autor', 'genero', 'detalles', 'disponible', 'creado', 'actualizado']
+        fields = [
+            'id', 'isbn', 'titulo', 'autor', 'genero', 'detalles',
+            'disponible', 'total_ejemplares', 'baja',
+            'disponibles', 'prestados', 'estado_ejemplar',
+            'creado', 'actualizado'
+        ]
 
     def validate_isbn(self, value):
         if value is not None:
@@ -62,6 +73,27 @@ class LibrosSerializer(serializers.ModelSerializer):
             if value == "":
                 return None
         return value
+
+    def get_prestados(self, obj):
+        try:
+            return obj.prestamos.filter(devuelto=False, estado='aceptado').count()
+        except Exception:
+            return 0
+
+    def get_disponibles(self, obj):
+        if getattr(obj, 'baja', False):
+            return 0
+        prestados = self.get_prestados(obj)
+        total = getattr(obj, 'total_ejemplares', 1) or 1
+        return max(0, total - prestados)
+
+    def get_estado_ejemplar(self, obj):
+        if getattr(obj, 'baja', False):
+            return 'dado_de_baja'
+        disponibles = self.get_disponibles(obj)
+        if disponibles <= 0 or not getattr(obj, 'disponible', True):
+            return 'sin_stock'
+        return 'disponible'
 
 class PrestamosSerializer(serializers.ModelSerializer):
     alumno_nombre = serializers.CharField(source='alumno.nombre', read_only=True)
