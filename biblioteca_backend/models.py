@@ -33,6 +33,7 @@ class Alumnos(models.Model):
 
 class Libros(models.Model):
     id = models.BigAutoField(primary_key=True)   # Se auto-incrementa automáticamente
+    isbn = models.CharField(max_length=30, blank=True, null=True, unique=True, verbose_name="ISBN")
     titulo = models.CharField(max_length=200)
     autor = models.CharField(max_length=150)
     genero = models.CharField(max_length=100)

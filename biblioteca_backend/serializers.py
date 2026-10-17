@@ -27,29 +27,93 @@ class AdminSerializer(serializers.ModelSerializer):
         model = Administradores
         fields = ['id', 'matricula', 'first_name', 'last_name', 'email', 'user_id']
 
+from datetime import timedelta
+from django.utils import timezone
+
 class AlumnoSerializer(serializers.ModelSerializer):
     email = serializers.CharField(source='user.email', read_only=True)
     first_name = serializers.CharField(source='user.first_name', read_only=True)
     last_name = serializers.CharField(source='user.last_name', read_only=True)
+    nombre_completo = serializers.SerializerMethodField()
+    prestamos_activos = serializers.SerializerMethodField()
 
     class Meta:
         model = Alumnos
         fields = [
             'id', 'matricula', 'nombre', 'apellido_paterno', 'apellido_materno',
-            'first_name', 'last_name', 'email', 'user_id'
+            'nombre_completo', 'first_name', 'last_name', 'email', 'user_id', 'prestamos_activos'
         ]
+
+    def get_nombre_completo(self, obj):
+        partes = [obj.nombre, obj.apellido_paterno, obj.apellido_materno]
+        return " ".join([p for p in partes if p]).strip()
+
+    def get_prestamos_activos(self, obj):
+        return obj.prestamos.filter(devuelto=False, estado='aceptado').count()
 
 class LibrosSerializer(serializers.ModelSerializer):
     class Meta:
         model = Libros
-        fields = ['id', 'titulo', 'autor', 'genero', 'detalles', 'disponible', 'creado', 'actualizado']
+        fields = ['id', 'isbn', 'titulo', 'autor', 'genero', 'detalles', 'disponible', 'creado', 'actualizado']
+
+    def validate_isbn(self, value):
+        if value is not None:
+            value = str(value).strip()
+            if value == "":
+                return None
+        return value
 
 class PrestamosSerializer(serializers.ModelSerializer):
-    # Mostrar nombre de alumno y libro para el frontend
     alumno_nombre = serializers.CharField(source='alumno.nombre', read_only=True)
+    alumno_matricula = serializers.CharField(source='alumno.matricula', read_only=True)
+    alumno_nombre_completo = serializers.SerializerMethodField()
+    alumno_prestamos_activos = serializers.SerializerMethodField()
     libro_titulo = serializers.CharField(source='libro.titulo', read_only=True)
+    libro_autor = serializers.CharField(source='libro.autor', read_only=True)
+    libro_isbn = serializers.CharField(source='libro.isbn', read_only=True)
+    fecha_vencimiento = serializers.SerializerMethodField()
+    es_vencido = serializers.SerializerMethodField()
+    dias_vencido = serializers.SerializerMethodField()
 
     class Meta:
         model = Prestamos
-        fields = ['id', 'alumno', 'alumno_nombre', 'libro', 'libro_titulo',
-                  'fecha_solicitud', 'fecha_devolucion', 'devuelto', 'estado']
+        fields = [
+            'id', 'alumno', 'alumno_nombre', 'alumno_matricula', 'alumno_nombre_completo',
+            'alumno_prestamos_activos', 'libro', 'libro_titulo', 'libro_autor', 'libro_isbn',
+            'fecha_solicitud', 'fecha_devolucion', 'fecha_vencimiento',
+            'es_vencido', 'dias_vencido', 'devuelto', 'estado'
+        ]
+        read_only_fields = ['alumno', 'fecha_solicitud', 'fecha_devolucion', 'estado']
+
+    def get_alumno_nombre_completo(self, obj):
+        if obj.alumno:
+            partes = [obj.alumno.nombre, obj.alumno.apellido_paterno, obj.alumno.apellido_materno]
+            return " ".join([p for p in partes if p]).strip()
+        return ""
+
+    def get_alumno_prestamos_activos(self, obj):
+        if obj.alumno:
+            return obj.alumno.prestamos.filter(devuelto=False, estado='aceptado').count()
+        return 0
+
+    def get_fecha_vencimiento(self, obj):
+        if obj.fecha_solicitud:
+            return obj.fecha_solicitud + timedelta(days=7)
+        return None
+
+    def get_es_vencido(self, obj):
+        if obj.devuelto or obj.estado != 'aceptado':
+            return False
+        if obj.fecha_solicitud:
+            return timezone.now() > (obj.fecha_solicitud + timedelta(days=7))
+        return False
+
+    def get_dias_vencido(self, obj):
+        if obj.devuelto or obj.estado != 'aceptado':
+            return 0
+        if obj.fecha_solicitud:
+            vence = obj.fecha_solicitud + timedelta(days=7)
+            now = timezone.now()
+            if now > vence:
+                return (now - vence).days or 1
+        return 0

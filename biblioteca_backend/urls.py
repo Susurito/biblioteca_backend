@@ -36,9 +36,9 @@ urlpatterns = [
 
     path('perfil/', PerfilUsuarioView.as_view(), name='perfil_usuario'),
 
-    # ⚠️ CAMBIO IMPORTANTE: Incluir router URLs ANTES de las rutas manuales
+    # CAMBIO IMPORTANTE: Incluir router URLs ANTES de las rutas manuales
     path('', include(router.urls)),
     
-    # ⚠️ CAMBIO: Usar una ruta diferente para evitar conflicto
+    # CAMBIO: Usar una ruta diferente para evitar conflicto
     path('solicitar-prestamo/', SolicitarPrestamoView.as_view(), name='solicitar-prestamo'),
 ]

@@ -136,6 +136,8 @@ class PerfilUsuarioView(APIView):
         if user.groups.filter(name="Alumno").exists():
             alumno = Alumnos.objects.get(user=user)
             perfil = {
+                "id": alumno.id,
+                "alumno_id": alumno.id,
                 "nombre": alumno.nombre,
                 "apellido_paterno": alumno.apellido_paterno,
                 "apellido_materno": alumno.apellido_materno,
