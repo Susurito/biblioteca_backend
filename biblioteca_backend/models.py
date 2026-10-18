@@ -1,3 +1,5 @@
+from datetime import timedelta
+from django.utils import timezone
 from django.db import models
 from django.contrib.auth.models import User
 
@@ -25,11 +27,13 @@ class Alumnos(models.Model):
     nombre = models.CharField(max_length=50)       # Copia del first_name
     apellido_paterno = models.CharField(max_length=50)
     apellido_materno = models.CharField(max_length=50)
+    rol = models.CharField(max_length=20, default='Estudiante', verbose_name="Rol")
     creado = models.DateTimeField(auto_now_add=True)
     actualizado = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.nombre} {self.apellido_paterno} {self.apellido_materno}"
+
 
 class Libros(models.Model):
     id = models.BigAutoField(primary_key=True)   # Se auto-incrementa automáticamente
@@ -55,7 +59,10 @@ class Prestamos(models.Model):
     libro = models.ForeignKey(Libros, on_delete=models.CASCADE, related_name='prestamos')
     fecha_solicitud = models.DateTimeField(auto_now_add=True)
     fecha_devolucion = models.DateTimeField(blank=True, null=True)
+    fecha_vencimiento = models.DateTimeField(blank=True, null=True, verbose_name="Fecha de vencimiento")
     devuelto = models.BooleanField(default=False)
+    multa_pagada = models.BooleanField(default=False, verbose_name="Multa pagada")
+    fecha_pago_multa = models.DateTimeField(blank=True, null=True, verbose_name="Fecha pago multa")
 
     ESTADOS = [
         ('pendiente', 'Pendiente'),
@@ -63,6 +70,15 @@ class Prestamos(models.Model):
         ('rechazado', 'Rechazado'),
     ]
     estado = models.CharField(max_length=10, choices=ESTADOS, default='pendiente')
+
+    def save(self, *args, **kwargs):
+        # Si no tiene fecha_vencimiento y está aceptado o tiene fecha_solicitud:
+        if not self.fecha_vencimiento:
+            if self.fecha_solicitud:
+                self.fecha_vencimiento = self.fecha_solicitud + timedelta(days=7)
+            elif self.estado == 'aceptado':
+                self.fecha_vencimiento = timezone.now() + timedelta(days=7)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Préstamo de {self.libro.titulo} a {self.alumno.nombre} ({self.estado})"

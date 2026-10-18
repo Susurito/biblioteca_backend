@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from biblioteca_backend.views import bootstrap
-from biblioteca_backend.views.users import UsuariosView, AdminView
+from biblioteca_backend.views.users import UsuariosView, AdminView, UsuariosViewSet
 from biblioteca_backend.views.alumnos import AlumnosView, AlumnosAll
 from biblioteca_backend.views.auth import CustomAuthToken, Logout
 from biblioteca_backend.views.users import PerfilUsuarioView
@@ -12,6 +12,7 @@ from biblioteca_backend.views.views import LibrosViewSet, PrestamosViewSet, Soli
 router = DefaultRouter()
 router.register(r'libros', LibrosViewSet, basename='libros')
 router.register(r'prestamos', PrestamosViewSet, basename='prestamos')
+router.register(r'usuarios', UsuariosViewSet, basename='usuarios')
 
 urlpatterns = [
     # Version

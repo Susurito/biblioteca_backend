@@ -129,23 +129,26 @@ class PrestamosSerializer(serializers.ModelSerializer):
         return 0
 
     def get_fecha_vencimiento(self, obj):
-        if obj.fecha_solicitud:
+        if obj.fecha_vencimiento:
+            return obj.fecha_vencimiento
+        if obj.fecha_solicitud and obj.estado != 'pendiente':
             return obj.fecha_solicitud + timedelta(days=7)
         return None
 
     def get_es_vencido(self, obj):
         if obj.devuelto or obj.estado != 'aceptado':
             return False
-        if obj.fecha_solicitud:
-            return timezone.now() > (obj.fecha_solicitud + timedelta(days=7))
+        fv = obj.fecha_vencimiento or (obj.fecha_solicitud + timedelta(days=7) if obj.fecha_solicitud else None)
+        if fv:
+            return timezone.now() > fv
         return False
 
     def get_dias_vencido(self, obj):
         if obj.devuelto or obj.estado != 'aceptado':
             return 0
-        if obj.fecha_solicitud:
-            vence = obj.fecha_solicitud + timedelta(days=7)
+        fv = obj.fecha_vencimiento or (obj.fecha_solicitud + timedelta(days=7) if obj.fecha_solicitud else None)
+        if fv:
             now = timezone.now()
-            if now > vence:
-                return (now - vence).days or 1
+            if now > fv:
+                return (now.date() - fv.date()).days or 1
         return 0
