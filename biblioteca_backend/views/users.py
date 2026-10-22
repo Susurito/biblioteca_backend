@@ -47,31 +47,54 @@ class UsuariosView(generics.CreateAPIView):
 
         # Normalizar nombre de grupo
         tipo_normalizado = tipo.lower()
-        if tipo_normalizado not in ["alumno", "administrador"]:
+        if tipo_normalizado != "alumno":
             user.delete()
-            return Response({"error": "Tipo de usuario no válido"}, status=400)
+            return Response(
+                {"error": "El registro público solo puede crear cuentas de Alumno. "
+                          "Las cuentas de Administrador deben darlas de alta otro administrador autenticado."},
+                status=403
+            )
 
         # Crear o asignar grupo
-        group, _ = Group.objects.get_or_create(name=tipo_normalizado)
+        group, _ = Group.objects.get_or_create(name="alumno")
         group.user_set.add(user)
 
-        # Crear registro según tipo
-        if tipo_normalizado == "alumno":
-            alumno = Alumnos.objects.create(
-                user=user,
-                matricula=matricula,
-                nombre=nombre,
-                apellido_paterno=apellido_paterno,
-                apellido_materno=apellido_materno
-            )
-            return Response({"id": alumno.id, "tipo": "Alumno"}, status=201)
+        # Crear registro de alumno
+        alumno = Alumnos.objects.create(
+            user=user,
+            matricula=matricula,
+            nombre=nombre,
+            apellido_paterno=apellido_paterno,
+            apellido_materno=apellido_materno
+        )
+        return Response({"id": alumno.id, "tipo": "Alumno"}, status=201)
+        # # Normalizar nombre de grupo
+        # tipo_normalizado = tipo.lower()
+        # if tipo_normalizado not in ["alumno", "administrador"]:
+        #     user.delete()
+        #     return Response({"error": "Tipo de usuario no válido"}, status=400)
 
-        elif tipo_normalizado == "administrador":
-            admin = Administradores.objects.create(
-                user=user,
-                matricula=matricula
-            )
-            return Response({"id": admin.id, "tipo": "Administrador"}, status=201)
+        # # Crear o asignar grupo
+        # group, _ = Group.objects.get_or_create(name=tipo_normalizado)
+        # group.user_set.add(user)
+
+        # # Crear registro según tipo
+        # if tipo_normalizado == "alumno":
+        #     alumno = Alumnos.objects.create(
+        #         user=user,
+        #         matricula=matricula,
+        #         nombre=nombre,
+        #         apellido_paterno=apellido_paterno,
+        #         apellido_materno=apellido_materno
+        #     )
+        #     return Response({"id": alumno.id, "tipo": "Alumno"}, status=201)
+
+        # elif tipo_normalizado == "administrador":
+        #     admin = Administradores.objects.create(
+        #         user=user,
+        #         matricula=matricula
+        #     )
+        #     return Response({"id": admin.id, "tipo": "Administrador"}, status=201)
 
 
 # === Gestión de Administradores existentes ===
