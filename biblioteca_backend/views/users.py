@@ -68,33 +68,6 @@ class UsuariosView(generics.CreateAPIView):
             apellido_materno=apellido_materno
         )
         return Response({"id": alumno.id, "tipo": "Alumno"}, status=201)
-        # # Normalizar nombre de grupo
-        # tipo_normalizado = tipo.lower()
-        # if tipo_normalizado not in ["alumno", "administrador"]:
-        #     user.delete()
-        #     return Response({"error": "Tipo de usuario no válido"}, status=400)
-
-        # # Crear o asignar grupo
-        # group, _ = Group.objects.get_or_create(name=tipo_normalizado)
-        # group.user_set.add(user)
-
-        # # Crear registro según tipo
-        # if tipo_normalizado == "alumno":
-        #     alumno = Alumnos.objects.create(
-        #         user=user,
-        #         matricula=matricula,
-        #         nombre=nombre,
-        #         apellido_paterno=apellido_paterno,
-        #         apellido_materno=apellido_materno
-        #     )
-        #     return Response({"id": alumno.id, "tipo": "Alumno"}, status=201)
-
-        # elif tipo_normalizado == "administrador":
-        #     admin = Administradores.objects.create(
-        #         user=user,
-        #         matricula=matricula
-        #     )
-        #     return Response({"id": admin.id, "tipo": "Administrador"}, status=201)
 
 
 # === Gestión de Administradores existentes ===
@@ -157,7 +130,7 @@ class PerfilUsuarioView(APIView):
         perfil = {}
 
         # Verificar si es alumno
-        if user.groups.filter(name="Alumno").exists():
+        if user.groups.filter(name__iexact="alumno").exists():
             alumno = Alumnos.objects.get(user=user)
             from biblioteca_backend.views.views import verificar_bloqueo_alumno
             bloqueado, motivo, fecha_desbloqueo = verificar_bloqueo_alumno(alumno)
@@ -176,13 +149,78 @@ class PerfilUsuarioView(APIView):
             }
 
         # Verificar si es administrador
-        elif user.groups.filter(name="Administrador").exists():
+        elif user.groups.filter(name__iexact="administrador").exists():
             admin = Administradores.objects.get(user=user)
+            partes_apellido = (user.last_name or '').split(' ', 1)
             perfil = {
+                "id": admin.id,
+                "nombre": user.first_name,
+                "apellido_paterno": partes_apellido[0] if partes_apellido else '',
+                "apellido_materno": partes_apellido[1] if len(partes_apellido) > 1 else '',
                 "email": user.email,
                 "matricula": admin.matricula,
                 "rol": "Administrador"
             }
+
+        return Response(perfil)
+
+    def put(self, request):
+        user = request.user
+        data = request.data
+
+        alumno = Alumnos.objects.filter(user=user).first()
+        admin = Administradores.objects.filter(user=user).first()
+
+        if not alumno and not admin:
+            return Response({"error": "No se encontró un perfil asociado a este usuario."}, status=404)
+
+        nombre = data.get('nombre')
+        apellido_paterno = data.get('apellido_paterno')
+        apellido_materno = data.get('apellido_materno')
+        email = data.get('email')
+        password = data.get('password')
+
+        if email:
+            user.email = email
+
+        if alumno:
+            if nombre:
+                alumno.nombre = nombre
+            if apellido_paterno:
+                alumno.apellido_paterno = apellido_paterno
+            if apellido_materno is not None:
+                alumno.apellido_materno = apellido_materno
+            alumno.save()
+
+            perfil = {
+                "id": alumno.id,
+                "alumno_id": alumno.id,
+                "nombre": alumno.nombre,
+                "apellido_paterno": alumno.apellido_paterno,
+                "apellido_materno": alumno.apellido_materno,
+                "email": user.email,
+                "matricula": alumno.matricula,
+                "rol": "Alumno"
+            }
+        else:
+            if nombre:
+                user.first_name = nombre
+            if apellido_paterno or apellido_materno is not None:
+                user.last_name = f"{apellido_paterno or ''} {apellido_materno or ''}".strip()
+
+            perfil = {
+                "nombre": user.first_name,
+                "apellido_paterno": apellido_paterno or '',
+                "apellido_materno": apellido_materno or '',
+                "email": user.email,
+                "matricula": admin.matricula,
+                "rol": "Administrador"
+            }
+
+        if password:
+            user.set_password(password)
+
+        user.save()
 
         return Response(perfil)
 
@@ -201,7 +239,7 @@ def format_usuario_data(user):
         bloqueado, bloqueo_motivo, bloqueo_hasta = verificar_bloqueo_alumno(alumno)
         prestamos_activos_count = Prestamos.objects.filter(alumno=alumno, devuelto=False, estado='aceptado').count()
         rol = getattr(alumno, 'rol', 'Estudiante') or 'Estudiante'
-        limite = 5 if rol.lower() == 'docente' else 3
+        limite = 3 #5 if rol.lower() == 'docente' else 3
         matricula = alumno.matricula
         nombre = alumno.nombre
         apellido_paterno = alumno.apellido_paterno

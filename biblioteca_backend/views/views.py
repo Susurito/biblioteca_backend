@@ -668,6 +668,13 @@ class PrestamosViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         prestamo = self.get_object()
+
+        if prestamo.devuelto:
+            return Response(
+                {"error": "Este préstamo ya fue registrado como devuelto anteriormente."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         prestamo.devuelto = True
         prestamo.fecha_devolucion = timezone.now()
         prestamo.save()
@@ -747,6 +754,13 @@ class PrestamosViewSet(viewsets.ModelViewSet):
                     {"error": "Acceso denegado. Solo los administradores pueden registrar la devolución de un libro."},
                     status=status.HTTP_403_FORBIDDEN
                 )
+
+            if prestamo.devuelto:
+                return Response(
+                    {"error": "Este préstamo ya fue registrado como devuelto anteriormente."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             prestamo.devuelto = True
             prestamo.fecha_devolucion = timezone.now()
             prestamo.save()
