@@ -1,0 +1,927 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Biblioteca — gateway público",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080"
+    }
+  ],
+  "paths": {
+    "/token/": {
+      "post": {
+        "summary": "Login por username, correo completo o matrícula",
+        "responses": {
+          "200": {
+            "description": "Login por username, correo completo o matrícula"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "password"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/register/": {
+      "post": {
+        "summary": "Registro público de alumno",
+        "responses": {
+          "201": {
+            "description": "Registro público de alumno"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "nombre",
+                  "password",
+                  "tipo",
+                  "matricula"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "nombre": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "tipo": {
+                    "type": "string"
+                  },
+                  "matricula": {
+                    "type": "string"
+                  },
+                  "apellido_paterno": {
+                    "type": "string"
+                  },
+                  "apellido_materno": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/perfil/": {
+      "get": {
+        "summary": "Perfil con user_id y alumno_id distintos",
+        "responses": {
+          "200": {
+            "description": "Perfil con user_id y alumno_id distintos"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "Perfil con user_id y alumno_id distintos",
+        "responses": {
+          "200": {
+            "description": "Perfil con user_id y alumno_id distintos"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ]
+      }
+    },
+    "/logout/": {
+      "post": {
+        "summary": "Invalidar token",
+        "responses": {
+          "200": {
+            "description": "Invalidar token"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ]
+      }
+    },
+    "/usuarios/": {
+      "get": {
+        "summary": "Gestión de usuarios, solo administrador",
+        "responses": {
+          "200": {
+            "description": "Gestión de usuarios, solo administrador"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Gestión de usuarios, solo administrador",
+        "responses": {
+          "200": {
+            "description": "Gestión de usuarios, solo administrador"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ]
+      }
+    },
+    "/usuarios/{user_id}/": {
+      "get": {
+        "summary": "Detalle y edición",
+        "responses": {
+          "200": {
+            "description": "Detalle y edición"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ]
+      },
+      "put": {
+        "summary": "Detalle y edición",
+        "responses": {
+          "200": {
+            "description": "Detalle y edición"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ]
+      }
+    },
+    "/usuarios/{user_id}/ficha/": {
+      "get": {
+        "summary": "Ficha, sanciones e historial",
+        "responses": {
+          "200": {
+            "description": "Ficha, sanciones e historial"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ]
+      }
+    },
+    "/usuarios/{user_id}/pagar-multa/": {
+      "post": {
+        "summary": "Pago idempotente de multas devueltas",
+        "responses": {
+          "200": {
+            "description": "Pago idempotente de multas devueltas"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ]
+      }
+    },
+    "/alumnos/all/": {
+      "get": {
+        "summary": "Listado protegido de alumnos",
+        "responses": {
+          "200": {
+            "description": "Listado protegido de alumnos"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ]
+      }
+    },
+    "/admin/create/": {
+      "post": {
+        "summary": "Alta de administrador, solo administrador",
+        "responses": {
+          "200": {
+            "description": "Alta de administrador, solo administrador"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ]
+      }
+    },
+    "/libros/": {
+      "get": {
+        "summary": "Catálogo paginado y alta",
+        "responses": {
+          "200": {
+            "description": "Catálogo paginado y alta"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Catálogo paginado y alta",
+        "responses": {
+          "200": {
+            "description": "Catálogo paginado y alta"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ]
+      }
+    },
+    "/libros/{libro_id}/": {
+      "get": {
+        "summary": "Consulta y edición bibliográfica e inventario",
+        "responses": {
+          "200": {
+            "description": "Consulta y edición bibliográfica e inventario"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "libro_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "summary": "Consulta y edición bibliográfica e inventario",
+        "responses": {
+          "200": {
+            "description": "Consulta y edición bibliográfica e inventario"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "libro_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ]
+      }
+    },
+    "/prestamos/": {
+      "get": {
+        "summary": "Préstamos paginados; alumnos ven solo sus propios préstamos",
+        "responses": {
+          "200": {
+            "description": "Préstamos paginados; alumnos ven solo sus propios préstamos"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ]
+      }
+    },
+    "/prestamos/{prestamo_id}/": {
+      "get": {
+        "summary": "Detalle de préstamo",
+        "responses": {
+          "200": {
+            "description": "Detalle de préstamo"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "prestamo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ]
+      }
+    },
+    "/solicitar-prestamo/": {
+      "post": {
+        "summary": "Crear pendiente sin reservar stock",
+        "responses": {
+          "201": {
+            "description": "Crear pendiente sin reservar stock"
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "libro"
+                ],
+                "properties": {
+                  "libro": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/prestamos/{prestamo_id}/aprobar/": {
+      "post": {
+        "summary": "Administrador: aprobar préstamo",
+        "responses": {
+          "202": {
+            "description": "Administrador: aprobar préstamo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operacion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "prestamo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ]
+      }
+    },
+    "/prestamos/{prestamo_id}/devolver/": {
+      "post": {
+        "summary": "Administrador: devolver préstamo",
+        "responses": {
+          "202": {
+            "description": "Administrador: devolver préstamo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operacion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "prestamo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ]
+      }
+    },
+    "/prestamos/{prestamo_id}/rechazar/": {
+      "post": {
+        "summary": "Administrador: rechazar préstamo",
+        "responses": {
+          "202": {
+            "description": "Administrador: rechazar préstamo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operacion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          },
+          "200": {
+            "description": "Rechazo inmediato sin reserva"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "prestamo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ]
+      }
+    },
+    "/operaciones/{operacion_id}/": {
+      "get": {
+        "summary": "Estado durable de operación; dueño o administrador",
+        "responses": {
+          "200": {
+            "description": "Estado durable de operación; dueño o administrador",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Operacion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos o transición inválidos"
+          },
+          "401": {
+            "description": "Token inválido"
+          },
+          "403": {
+            "description": "Permiso insuficiente"
+          },
+          "503": {
+            "description": "Dependencia indisponible"
+          }
+        },
+        "security": [
+          {
+            "Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "operacion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "Token": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "Token <clave>"
+      }
+    },
+    "schemas": {
+      "Operacion": {
+        "type": "object",
+        "required": [
+          "operacion_id",
+          "prestamo_id",
+          "estado",
+          "resultado"
+        ],
+        "properties": {
+          "operacion_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "prestamo_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "estado": {
+            "enum": [
+              "reservando",
+              "confirmando",
+              "compensando",
+              "liberando",
+              "completada",
+              "fallida"
+            ]
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "resultado": {
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

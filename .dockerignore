@@ -36,3 +36,8 @@ htmlcov/
 # Archivos de IDEs
 .vscode/
 .idea/
+
+exports/
+backups/
+**/users_export.json
+!services/**

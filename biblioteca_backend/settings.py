@@ -11,8 +11,11 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 """
 
 import os
+import sys
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Make the temporary adapters available to local manage.py and WSGI as well as Compose.
+sys.path.insert(0, os.path.join(BASE_DIR, 'services', 'common'))
 
 SECRET_KEY = os.environ.get(
     'DJANGO_SECRET_KEY',
@@ -163,3 +166,13 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
+# Temporary adapters enabled only after the corresponding data cutover.
+INTERNAL_SERVICE_KEY = os.environ.get('INTERNAL_SERVICE_KEY', '')
+IDENTITY_URL = os.environ.get('IDENTITY_URL', 'http://svc-identidad:8001')
+BOOKS_URL = os.environ.get('BOOKS_URL', 'http://svc-libros:8003')
+CATALOG_REMOTE_ENABLED = os.environ.get('CATALOG_REMOTE_ENABLED', '0') == '1'
+IDENTITY_AUTH_ENABLED = os.environ.get('IDENTITY_AUTH_ENABLED', '0') == '1'
+if IDENTITY_AUTH_ENABLED:
+    REST_FRAMEWORK['DEFAULT_AUTHENTICATION_CLASSES'] = (
+        'biblioteca_backend.migration_bridge.IdentityAuthentication',
+    )

@@ -1,8 +1,13 @@
-from rest_framework import serializers
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
+from django.utils import timezone
+from rest_framework import serializers
+
 from biblioteca_backend.models import Administradores, Alumnos, Libros, Prestamos
 
 User = get_user_model()
+
 
 class UserSerializer(serializers.ModelSerializer):
     rol = serializers.SerializerMethodField()
@@ -18,6 +23,7 @@ class UserSerializer(serializers.ModelSerializer):
             return 'admin'
         return 'sin_rol'
 
+
 class AdminSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(source='user.first_name', read_only=True)
     last_name = serializers.CharField(source='user.last_name', read_only=True)
@@ -27,8 +33,6 @@ class AdminSerializer(serializers.ModelSerializer):
         model = Administradores
         fields = ['id', 'matricula', 'first_name', 'last_name', 'email', 'user_id']
 
-from datetime import timedelta
-from django.utils import timezone
 
 class AlumnoSerializer(serializers.ModelSerializer):
     email = serializers.CharField(source='user.email', read_only=True)
@@ -50,6 +54,7 @@ class AlumnoSerializer(serializers.ModelSerializer):
 
     def get_prestamos_activos(self, obj):
         return obj.prestamos.filter(devuelto=False, estado='aceptado').count()
+
 
 class LibrosSerializer(serializers.ModelSerializer):
     total_ejemplares = serializers.IntegerField(required=False, default=1)
@@ -95,11 +100,15 @@ class LibrosSerializer(serializers.ModelSerializer):
             return 'sin_stock'
         return 'disponible'
 
+
 class PrestamosSerializer(serializers.ModelSerializer):
     alumno_nombre = serializers.CharField(source='alumno.nombre', read_only=True)
     alumno_matricula = serializers.CharField(source='alumno.matricula', read_only=True)
     alumno_nombre_completo = serializers.SerializerMethodField()
     alumno_prestamos_activos = serializers.SerializerMethodField()
+    alumno_bloqueado = serializers.SerializerMethodField()
+    alumno_bloqueo_motivo = serializers.SerializerMethodField()
+    alumno_bloqueo_hasta = serializers.SerializerMethodField()
     libro_titulo = serializers.CharField(source='libro.titulo', read_only=True)
     libro_autor = serializers.CharField(source='libro.autor', read_only=True)
     libro_isbn = serializers.CharField(source='libro.isbn', read_only=True)
@@ -111,11 +120,31 @@ class PrestamosSerializer(serializers.ModelSerializer):
         model = Prestamos
         fields = [
             'id', 'alumno', 'alumno_nombre', 'alumno_matricula', 'alumno_nombre_completo',
-            'alumno_prestamos_activos', 'libro', 'libro_titulo', 'libro_autor', 'libro_isbn',
+            'alumno_prestamos_activos', 'alumno_bloqueado', 'alumno_bloqueo_motivo', 'alumno_bloqueo_hasta',
+            'libro', 'libro_titulo', 'libro_autor', 'libro_isbn',
             'fecha_solicitud', 'fecha_devolucion', 'fecha_vencimiento',
             'es_vencido', 'dias_vencido', 'devuelto', 'estado'
         ]
         read_only_fields = ['alumno', 'fecha_solicitud', 'fecha_devolucion', 'estado']
+
+    def _get_bloqueo(self, obj):
+        """Llama a verificar_bloqueo_alumno con lazy import para evitar circular imports."""
+        if obj.alumno:
+            from biblioteca_backend.views.views import verificar_bloqueo_alumno
+            return verificar_bloqueo_alumno(obj.alumno)
+        return False, "", None
+
+    def get_alumno_bloqueado(self, obj):
+        bloqueado, _, _ = self._get_bloqueo(obj)
+        return bloqueado
+
+    def get_alumno_bloqueo_motivo(self, obj):
+        _, motivo, _ = self._get_bloqueo(obj)
+        return motivo
+
+    def get_alumno_bloqueo_hasta(self, obj):
+        _, _, fecha = self._get_bloqueo(obj)
+        return fecha
 
     def get_alumno_nombre_completo(self, obj):
         if obj.alumno:

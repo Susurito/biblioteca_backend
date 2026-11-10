@@ -33,3 +33,7 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+exports/
+backups/
+**/users_export.json

@@ -1,51 +1,232 @@
+# Default routing remains on the monolith until imported data is reconciled.
 services:
-
-  # -----------------------------------------------
-  # Contenedor de Base de Datos MySQL
-  # -----------------------------------------------
-  db:
-    image: mysql:8.0
-    container_name: biblioteca_db
-    restart: always
-    environment:
-      MYSQL_DATABASE: biblioteca1_db
-      MYSQL_ROOT_PASSWORD: rootpassword
-    ports:
-      - "3307:3306"  # Mapeamos al 3307 del host porque XAMPP ya usa el 3306
+  nginx:
+    image: nginx:1.28-alpine
+    ports: ['8080:80']
     volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+    environment:
+      IDENTITY_UPSTREAM: ${IDENTITY_UPSTREAM:-web:8000}
+      BOOKS_UPSTREAM: ${BOOKS_UPSTREAM:-web:8000}
+      LOANS_UPSTREAM: ${LOANS_UPSTREAM:-web:8000}
+      FALLBACK_UPSTREAM: ${FALLBACK_UPSTREAM:-web:8000}
+      NGINX_ENVSUBST_FILTER: '.*_UPSTREAM|MAINTENANCE_MODE'
+      MAINTENANCE_MODE: ${MAINTENANCE_MODE:-0}
+    depends_on: [web, svc-identidad, svc-libros, svc-prestamos]
+    restart: unless-stopped
 
-  # -----------------------------------------------
-  # Contenedor del Backend (Django)
-  # -----------------------------------------------
   web:
     build: .
-    container_name: biblioteca_web
-    # Espera a que MySQL esté sano, luego migra y arranca el servidor
-    command: >
-      bash -c "python manage.py migrate &&
-               python manage.py runserver 0.0.0.0:8000"
-    volumes:
-      - .:/app
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    expose: ['8000']
+    volumes: ['.:/app']
+    env_file: .env
     environment:
-      - DB_HOST=db
-      - DB_NAME=biblioteca1_db
-      - DB_USER=root
-      - DB_PASSWORD=rootpassword
-      - DB_PORT=3306
+      DB_HOST: db
+      DB_NAME: biblioteca1_db
+      DB_USER: root
+      DB_PASSWORD: ${LEGACY_DB_PASSWORD:-rootpassword}
+      DB_PORT: '3306'
+      IDENTITY_AUTH_ENABLED: ${IDENTITY_AUTH_ENABLED:-0}
+      CATALOG_REMOTE_ENABLED: ${CATALOG_REMOTE_ENABLED:-0}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Set INTERNAL_SERVICE_KEY in .env}
+      IDENTITY_URL: http://svc-identidad:8001
+      BOOKS_URL: http://svc-libros:8003
+      PYTHONPATH: /app/services/common
     depends_on:
-      db:
-        condition: service_healthy
+      db: {condition: service_healthy}
 
-# Volumen persistente para los datos de MySQL
+  worker-legacy:
+    build: .
+    command: python manage.py recover_catalog --loop
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_NAME: biblioteca1_db
+      DB_USER: root
+      DB_PASSWORD: ${LEGACY_DB_PASSWORD:-rootpassword}
+      DB_PORT: '3306'
+      CATALOG_REMOTE_ENABLED: ${CATALOG_REMOTE_ENABLED:-0}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
+      IDENTITY_URL: http://svc-identidad:8001
+      BOOKS_URL: http://svc-libros:8003
+      PYTHONPATH: /app/services/common
+    depends_on:
+      web: {condition: service_started}
+      svc-libros: {condition: service_healthy}
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: biblioteca1_db
+      MYSQL_ROOT_PASSWORD: ${LEGACY_DB_PASSWORD:-rootpassword}
+    ports: ['127.0.0.1:3307:3306']
+    volumes: ['mysql_data:/var/lib/mysql']
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h localhost -u root -p"$$MYSQL_ROOT_PASSWORD"']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: biblioteca
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
+    volumes: ['rabbit_data:/var/lib/rabbitmq']
+    ports: ['127.0.0.1:15672:15672']
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  svc-identidad:
+    build: {context: ., dockerfile: services/svc-identidad/Dockerfile}
+    command: sh -c "python manage.py migrate --noinput && gunicorn identidad_service.wsgi:application --bind 0.0.0.0:8001 --workers 2 --threads 2 --access-logfile -"
+    expose: ['8001']
+    environment: &env_identidad
+      DJANGO_SETTINGS_MODULE: identidad_service.settings
+      DB_HOST: db-identidad
+      DB_NAME: identidad_db
+      DB_USER: identidad
+      DB_PASSWORD: ${IDENTIDAD_DB_PASSWORD:?Set IDENTIDAD_DB_PASSWORD in .env}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Set INTERNAL_SERVICE_KEY in .env}
+      IDENTITY_URL: http://svc-identidad:8001
+      BOOKS_URL: http://svc-libros:8003
+      LOANS_URL: ${LOANS_OWNER_URL:-http://web:8000}
+      RABBITMQ_URL: amqp://biblioteca:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2F
+    depends_on:
+      db-identidad: {condition: service_healthy}
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8001/health/',timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  db-identidad:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: identidad_db
+      MYSQL_USER: identidad
+      MYSQL_PASSWORD: ${IDENTIDAD_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ADMIN_PASSWORD:?Set MYSQL_ADMIN_PASSWORD in .env}
+    volumes: ['mysql_identidad:/var/lib/mysql']
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h localhost -u root -p"$$MYSQL_ROOT_PASSWORD"']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  svc-libros:
+    build: {context: ., dockerfile: services/svc-libros/Dockerfile}
+    command: sh -c "python manage.py migrate --noinput && gunicorn libros_service.wsgi:application --bind 0.0.0.0:8003 --workers 2 --threads 2 --access-logfile -"
+    expose: ['8003']
+    environment: &env_libros
+      DJANGO_SETTINGS_MODULE: libros_service.settings
+      DB_HOST: db-libros
+      DB_NAME: libros_db
+      DB_USER: libros
+      DB_PASSWORD: ${LIBROS_DB_PASSWORD:?Set LIBROS_DB_PASSWORD in .env}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Set INTERNAL_SERVICE_KEY in .env}
+      IDENTITY_URL: http://svc-identidad:8001
+      BOOKS_URL: http://svc-libros:8003
+      LOANS_URL: ${LOANS_OWNER_URL:-http://web:8000}
+      RABBITMQ_URL: amqp://biblioteca:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2F
+    depends_on:
+      db-libros: {condition: service_healthy}
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8003/health/',timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  db-libros:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: libros_db
+      MYSQL_USER: libros
+      MYSQL_PASSWORD: ${LIBROS_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ADMIN_PASSWORD:?Set MYSQL_ADMIN_PASSWORD in .env}
+    volumes: ['mysql_libros:/var/lib/mysql']
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h localhost -u root -p"$$MYSQL_ROOT_PASSWORD"']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  worker-libros:
+    build: {context: ., dockerfile: services/svc-libros/Dockerfile}
+    command: python manage.py runworker
+    environment: *env_libros
+    depends_on:
+      svc-libros: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
+  svc-prestamos:
+    build: {context: ., dockerfile: services/svc-prestamos/Dockerfile}
+    command: sh -c "python manage.py migrate --noinput && gunicorn prestamos_service.wsgi:application --bind 0.0.0.0:8004 --workers 2 --threads 2 --access-logfile -"
+    expose: ['8004']
+    environment: &env_prestamos
+      DJANGO_SETTINGS_MODULE: prestamos_service.settings
+      DB_HOST: db-prestamos
+      DB_NAME: prestamos_db
+      DB_USER: prestamos
+      DB_PASSWORD: ${PRESTAMOS_DB_PASSWORD:?Set PRESTAMOS_DB_PASSWORD in .env}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?Set INTERNAL_SERVICE_KEY in .env}
+      IDENTITY_URL: http://svc-identidad:8001
+      BOOKS_URL: http://svc-libros:8003
+      LOANS_URL: ${LOANS_OWNER_URL:-http://web:8000}
+      RABBITMQ_URL: amqp://biblioteca:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2F
+    depends_on:
+      db-prestamos: {condition: service_healthy}
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8004/health/',timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  db-prestamos:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: prestamos_db
+      MYSQL_USER: prestamos
+      MYSQL_PASSWORD: ${PRESTAMOS_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ADMIN_PASSWORD:?Set MYSQL_ADMIN_PASSWORD in .env}
+    volumes: ['mysql_prestamos:/var/lib/mysql']
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h localhost -u root -p"$$MYSQL_ROOT_PASSWORD"']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  worker-prestamos:
+    build: {context: ., dockerfile: services/svc-prestamos/Dockerfile}
+    command: python manage.py runworker
+    environment: *env_prestamos
+    depends_on:
+      svc-prestamos: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    restart: unless-stopped
+
 volumes:
   mysql_data:
+  mysql_auth: # Old auth extraction retained on disk; do not delete this volume.
+  mysql_identidad:
+  mysql_libros:
+  mysql_prestamos:
+  rabbit_data:

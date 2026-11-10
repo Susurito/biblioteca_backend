@@ -1,11 +1,12 @@
-from django.shortcuts import get_object_or_404
 from django.db import transaction
 from rest_framework import generics, permissions
 from rest_framework.response import Response
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
-from biblioteca_backend.models import Alumnos, Administradores
+from biblioteca_backend.models import Alumnos
 from biblioteca_backend.serializers import AlumnoSerializer
+
+from biblioteca_backend.permissions import AdminOnly
 
 User = get_user_model()
 
@@ -14,7 +15,7 @@ class AlumnosAll(generics.ListAPIView):
     """
     Listado de todos los alumnos activos.
     """
-    permission_classes = (permissions.IsAuthenticated,)
+    permission_classes = (AdminOnly,)
     serializer_class = AlumnoSerializer
 
     def get_queryset(self):
@@ -23,15 +24,15 @@ class AlumnosAll(generics.ListAPIView):
 
 class AlumnosView(generics.CreateAPIView):
     """
-    Registro de alumnos (y administradores si es necesario).
+    Registro público de alumnos.
+    Solo permite crear cuentas de tipo Alumno; los Administradores
+    deben ser dados de alta por otro administrador autenticado.
     """
     permission_classes = (permissions.AllowAny,)
     serializer_class = AlumnoSerializer
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
-        print("Datos recibidos en POST:", request.data)
-
         email = request.data.get('email')
         nombre = request.data.get('nombre', '')
         apellido_paterno = request.data.get('apellido_paterno', '')
@@ -72,7 +73,7 @@ class AlumnosView(generics.CreateAPIView):
         user.set_password(password)
         user.save()
 
-        # Crear o asignar grupo
+        # Asignar grupo alumno
         group, _ = Group.objects.get_or_create(name="alumno")
         group.user_set.add(user)
 
@@ -85,42 +86,3 @@ class AlumnosView(generics.CreateAPIView):
             apellido_materno=apellido_materno
         )
         return Response({"id": alumno.id, "tipo": "Alumno"}, status=201)
-
-        # tipo_normalizado = tipo.lower()
-        # if tipo_normalizado not in ["alumno", "administrador"]:
-        #     return Response(
-        #         {"error": f"Tipo de usuario inválido: {tipo}"},
-        #         status=400
-        #     )
-
-        # # Crear usuario
-        # user = User.objects.create_user(
-        #     username=email,
-        #     email=email,
-        #     first_name=nombre,
-        #     last_name=f"{apellido_paterno} {apellido_materno}".strip()
-        # )
-        # user.set_password(password)
-        # user.save()
-
-        # # Crear o asignar grupo
-        # group, _ = Group.objects.get_or_create(name=tipo_normalizado)
-        # group.user_set.add(user)
-
-        # # Crear registro según tipo
-        # if tipo_normalizado == "alumno":
-        #     alumno = Alumnos.objects.create(
-        #         user=user,
-        #         matricula=matricula,
-        #         nombre=nombre,
-        #         apellido_paterno=apellido_paterno,
-        #         apellido_materno=apellido_materno
-        #     )
-        #     return Response({"id": alumno.id, "tipo": "Alumno"}, status=201)
-
-        # elif tipo_normalizado == "administrador":
-        #     admin = Administradores.objects.create(
-        #         user=user,
-        #         matricula=matricula
-        #     )
-        #     return Response({"id": admin.id, "tipo": "Administrador"}, status=201)

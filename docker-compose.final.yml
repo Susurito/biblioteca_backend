@@ -1,0 +1,28 @@
+# Requires Docker Compose >= 2.24.4 for !override. Apply only after reconciliation.
+services:
+  web:
+    profiles: [legacy]
+  db:
+    profiles: [legacy]
+  worker-legacy:
+    profiles: [legacy]
+  nginx:
+    depends_on: !override
+      svc-identidad: {condition: service_healthy}
+      svc-libros: {condition: service_healthy}
+      svc-prestamos: {condition: service_healthy}
+    environment:
+      IDENTITY_UPSTREAM: svc-identidad:8001
+      BOOKS_UPSTREAM: svc-libros:8003
+      LOANS_UPSTREAM: svc-prestamos:8004
+      FALLBACK_UPSTREAM: svc-identidad:8001
+  svc-identidad:
+    environment:
+      LOANS_URL: http://svc-prestamos:8004
+  svc-libros:
+    environment:
+      LEGACY_CATALOG_ENABLED: '0'
+      LOANS_URL: http://svc-prestamos:8004
+  svc-prestamos:
+    environment:
+      LOANS_URL: http://svc-prestamos:8004

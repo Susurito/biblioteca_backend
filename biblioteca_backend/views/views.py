@@ -1,116 +1,35 @@
+from django.conf import settings
+from django.db import transaction
 from django.db import models
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from django.contrib.auth.models import Group
-from django.contrib.auth import get_user_model, authenticate
-from rest_framework import serializers, viewsets, permissions, generics
 from django.contrib.auth import get_user_model
+from rest_framework import viewsets, permissions, generics
+from rest_framework import serializers
 from biblioteca_backend.models import Administradores, Alumnos, Libros, Prestamos
+from biblioteca_backend.serializers import (
+    LibrosSerializer,
+    PrestamosSerializer,
+)
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
-from django.utils import timezone  # ⚠️ IMPORTANTE: Agregar esta importación
+from rest_framework.pagination import PageNumberPagination
+from datetime import timedelta
+from django.utils import timezone
 
 User = get_user_model()
 
-# Tus serializers
-class UserSerializer(serializers.ModelSerializer):
-    rol = serializers.SerializerMethodField()
-
-    class Meta:
-        model = User
-        fields = ['id', 'username', 'email', 'rol']
-
-    def get_rol(self, obj):
-        if obj.groups.filter(name="Alumno").exists():
-            return 'alumnos'
-        elif obj.groups.filter(name="Administrador").exists():
-            return 'admin'
-        return 'sin_rol'
-
-class AdminSerializer(serializers.ModelSerializer):
-    first_name = serializers.CharField(source='user.first_name', read_only=True)
-    last_name = serializers.CharField(source='user.last_name', read_only=True)
-    email = serializers.CharField(source='user.email', read_only=True)
-
-    class Meta:
-        model = Administradores
-        fields = ['id', 'matricula', 'first_name', 'last_name', 'email', 'user_id']
-
-from datetime import timedelta
-
-class AlumnoSerializer(serializers.ModelSerializer):
-    email = serializers.CharField(source='user.email', read_only=True)
-    first_name = serializers.CharField(source='user.first_name', read_only=True)
-    last_name = serializers.CharField(source='user.last_name', read_only=True)
-    nombre_completo = serializers.SerializerMethodField()
-    prestamos_activos = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Alumnos
-        fields = [
-            'id', 'matricula', 'nombre', 'apellido_paterno', 'apellido_materno',
-            'nombre_completo', 'first_name', 'last_name', 'email', 'user_id', 'prestamos_activos'
-        ]
-
-    def get_nombre_completo(self, obj):
-        partes = [obj.nombre, obj.apellido_paterno, obj.apellido_materno]
-        return " ".join([p for p in partes if p]).strip()
-
-    def get_prestamos_activos(self, obj):
-        return obj.prestamos.filter(devuelto=False, estado='aceptado').count()
-
-class LibrosSerializer(serializers.ModelSerializer):
-    total_ejemplares = serializers.IntegerField(required=False, default=1)
-    baja = serializers.BooleanField(required=False, default=False)
-    disponibles = serializers.SerializerMethodField()
-    prestados = serializers.SerializerMethodField()
-    estado_ejemplar = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Libros
-        fields = [
-            'id', 'isbn', 'titulo', 'autor', 'genero', 'detalles',
-            'disponible', 'total_ejemplares', 'baja',
-            'disponibles', 'prestados', 'estado_ejemplar',
-            'creado', 'actualizado'
-        ]
-
-    def validate_isbn(self, value):
-        if value is not None:
-            value = str(value).strip()
-            if value == "":
-                return None
-        return value
-
-    def get_prestados(self, obj):
-        try:
-            return obj.prestamos.filter(devuelto=False, estado='aceptado').count()
-        except Exception:
-            return 0
-
-    def get_disponibles(self, obj):
-        if getattr(obj, 'baja', False):
-            return 0
-        prestados = self.get_prestados(obj)
-        total = getattr(obj, 'total_ejemplares', 1) or 1
-        return max(0, total - prestados)
-
-    def get_estado_ejemplar(self, obj):
-        if getattr(obj, 'baja', False):
-            return 'dado_de_baja'
-        disponibles = self.get_disponibles(obj)
-        if disponibles <= 0 or not getattr(obj, 'disponible', True):
-            return 'sin_stock'
-        return 'disponible'
 
 def verificar_bloqueo_alumno(alumno):
     """
     Regla de Negocio RN-04:
     Si un alumno se retrasó más de 7 días en la devolución de un libro:
     - Se le aplica multa + bloqueo de 15 días.
-    - Durante esos 15 días posteriores a la devolución, el alumno está bloqueado y no puede solicitar préstamos.
-    - Si actualmente tiene un libro sin devolver con más de 7 días de retraso, también está bloqueado de inmediato.
+    - Durante esos 15 días posteriores a la devolución, el alumno está bloqueado
+      y no puede solicitar préstamos.
+    - Si actualmente tiene un libro sin devolver con más de 7 días de retraso,
+      también está bloqueado de inmediato.
 
     Retorna: (esta_bloqueado: bool, mensaje_error: str, fecha_desbloqueo: str | None)
     """
@@ -138,7 +57,7 @@ def verificar_bloqueo_alumno(alumno):
                     f"hasta devolverlo y cumplir la suspensión de 15 días."
                 ), fecha_str
 
-    # 2. Verificar préstamos devueltos con más de 7 días de retraso cuya suspensión de 15 días sigue vigente
+    # 2. Verificar préstamos devueltos con más de 7 días de retraso cuya suspensión sigue vigente
     prestamos_devueltos = Prestamos.objects.filter(
         alumno=alumno,
         devuelto=True,
@@ -161,85 +80,6 @@ def verificar_bloqueo_alumno(alumno):
 
     return False, "", None
 
-class PrestamosSerializer(serializers.ModelSerializer):
-    alumno_nombre = serializers.CharField(source='alumno.nombre', read_only=True)
-    alumno_matricula = serializers.CharField(source='alumno.matricula', read_only=True)
-    alumno_nombre_completo = serializers.SerializerMethodField()
-    alumno_prestamos_activos = serializers.SerializerMethodField()
-    alumno_bloqueado = serializers.SerializerMethodField()
-    alumno_bloqueo_motivo = serializers.SerializerMethodField()
-    alumno_bloqueo_hasta = serializers.SerializerMethodField()
-    libro_titulo = serializers.CharField(source='libro.titulo', read_only=True)
-    libro_autor = serializers.CharField(source='libro.autor', read_only=True)
-    libro_isbn = serializers.CharField(source='libro.isbn', read_only=True)
-    fecha_vencimiento = serializers.SerializerMethodField()
-    es_vencido = serializers.SerializerMethodField()
-    dias_vencido = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Prestamos
-        fields = [
-            'id', 'alumno', 'alumno_nombre', 'alumno_matricula', 'alumno_nombre_completo',
-            'alumno_prestamos_activos', 'alumno_bloqueado', 'alumno_bloqueo_motivo', 'alumno_bloqueo_hasta',
-            'libro', 'libro_titulo', 'libro_autor', 'libro_isbn',
-            'fecha_solicitud', 'fecha_devolucion', 'fecha_vencimiento',
-            'es_vencido', 'dias_vencido', 'devuelto', 'estado'
-        ]
-        read_only_fields = ['alumno', 'fecha_solicitud', 'fecha_devolucion', 'estado']
-
-    def get_alumno_bloqueado(self, obj):
-        if obj.alumno:
-            bloqueado, _, _ = verificar_bloqueo_alumno(obj.alumno)
-            return bloqueado
-        return False
-
-    def get_alumno_bloqueo_motivo(self, obj):
-        if obj.alumno:
-            _, motivo, _ = verificar_bloqueo_alumno(obj.alumno)
-            return motivo
-        return ""
-
-    def get_alumno_bloqueo_hasta(self, obj):
-        if obj.alumno:
-            _, _, fecha = verificar_bloqueo_alumno(obj.alumno)
-            return fecha
-        return None
-
-    def get_alumno_nombre_completo(self, obj):
-        if obj.alumno:
-            partes = [obj.alumno.nombre, obj.alumno.apellido_paterno, obj.alumno.apellido_materno]
-            return " ".join([p for p in partes if p]).strip()
-        return ""
-
-    def get_alumno_prestamos_activos(self, obj):
-        if obj.alumno:
-            return obj.alumno.prestamos.filter(devuelto=False, estado='aceptado').count()
-        return 0
-
-    def get_fecha_vencimiento(self, obj):
-        if obj.fecha_vencimiento:
-            return obj.fecha_vencimiento
-        if obj.fecha_solicitud and obj.estado != 'pendiente':
-            return obj.fecha_solicitud + timedelta(days=7)
-        return None
-
-    def get_es_vencido(self, obj):
-        if obj.devuelto or obj.estado != 'aceptado':
-            return False
-        fv = obj.fecha_vencimiento or (obj.fecha_solicitud + timedelta(days=7) if obj.fecha_solicitud else None)
-        if fv:
-            return timezone.now() > fv
-        return False
-
-    def get_dias_vencido(self, obj):
-        if obj.devuelto or obj.estado != 'aceptado':
-            return 0
-        fv = obj.fecha_vencimiento or (obj.fecha_solicitud + timedelta(days=7) if obj.fecha_solicitud else None)
-        if fv:
-            now = timezone.now()
-            if now > fv:
-                return (now.date() - fv.date()).days or 1
-        return 0
 
 # Permiso personalizado para libros: lectura pública o autenticada, escritura solo admin
 class IsAdminOrReadOnly(permissions.BasePermission):
@@ -260,7 +100,7 @@ class IsAdminOrReadOnly(permissions.BasePermission):
             Administradores.objects.filter(user=user).exists()
         )
 
-# Vistas
+
 class LibrosViewSet(viewsets.ModelViewSet):
     queryset = Libros.objects.all().order_by('-id')
     serializer_class = LibrosSerializer
@@ -282,12 +122,7 @@ class LibrosViewSet(viewsets.ModelViewSet):
         Registrar un nuevo libro (POST /libros/).
         Función exclusiva para usuarios con rol de Administrador.
         """
-        user = request.user
-        username = user.username if user.is_authenticated else "Anónimo"
-        print(f"DEBUG registrar_libro - Usuario: {username}, Autenticado: {user.is_authenticated}")
-
-        if not self._es_administrador(user):
-            print(f"Acceso denegado: El usuario '{username}' no tiene rol de Administrador")
+        if not self._es_administrador(request.user):
             return Response(
                 {"error": "Acceso denegado. Solo los administradores pueden registrar libros."},
                 status=status.HTTP_403_FORBIDDEN
@@ -295,14 +130,12 @@ class LibrosViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
-            print(f"Error de validación al registrar libro: {serializer.errors}")
             return Response(
                 {"error": "Datos inválidos", "detalles": serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         self.perform_create(serializer)
-        print(f"Libro registrado exitosamente: '{serializer.data.get('titulo')}' por {username}")
         return Response(
             {
                 "message": "Libro registrado exitosamente",
@@ -358,14 +191,14 @@ class LibrosViewSet(viewsets.ModelViewSet):
         sin_stock = 0
         dados_de_baja = 0
 
-        for l in libros:
-            if getattr(l, 'baja', False):
+        for libro in libros:
+            if getattr(libro, 'baja', False):
                 dados_de_baja += 1
             else:
-                prestados = l.prestamos.filter(devuelto=False, estado='aceptado').count()
-                total = getattr(l, 'total_ejemplares', 1) or 1
+                prestados = libro.prestamos.filter(devuelto=False, estado='aceptado').count()
+                total = getattr(libro, 'total_ejemplares', 1) or 1
                 disponibles = max(0, total - prestados)
-                if disponibles <= 0 or not l.disponible:
+                if disponibles <= 0 or not libro.disponible:
                     sin_stock += 1
                 else:
                     activos += 1
@@ -458,12 +291,19 @@ class LibrosViewSet(viewsets.ModelViewSet):
             )
         return super().destroy(request, *args, **kwargs)
 
-from rest_framework.pagination import PageNumberPagination
+
+def locked_legacy_loan(pid):
+    preview = Prestamos.objects.get(pk=pid)
+    Alumnos.objects.select_for_update().get(pk=preview.alumno_id)
+    Libros.objects.select_for_update().get(pk=preview.libro_id)
+    return Prestamos.objects.select_for_update().get(pk=pid)
+
 
 class PrestamosPagination(PageNumberPagination):
     page_size = 100
     page_size_query_param = 'page_size'
     max_page_size = 500
+
 
 class PrestamosViewSet(viewsets.ModelViewSet):
     pagination_class = PrestamosPagination
@@ -484,7 +324,6 @@ class PrestamosViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        print(f"[DEBUG] get_queryset - Usuario: {user.username}, Grupos: {list(user.groups.values_list('name', flat=True))}")
 
         # Si es admin, ve todos los préstamos o filtrados por estado si se solicita
         if self._es_administrador(user):
@@ -505,24 +344,17 @@ class PrestamosViewSet(viewsets.ModelViewSet):
         return Prestamos.objects.none()
 
     def create(self, request, *args, **kwargs):
-        user = request.user
-        if not self._es_administrador(user):
-            try:
-                alumno = Alumnos.objects.get(user=user)
-                bloqueado, mensaje_bloqueo, fecha_desbloqueo = verificar_bloqueo_alumno(alumno)
-                if bloqueado:
-                    return Response({
-                        "error": mensaje_bloqueo,
-                        "bloqueado": True,
-                        "fecha_desbloqueo": fecha_desbloqueo
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            except Alumnos.DoesNotExist:
-                return Response({"error": "No eres un alumno registrado."}, status=status.HTTP_400_BAD_REQUEST)
-        return super().create(request, *args, **kwargs)
+        return SolicitarPrestamoView.as_view()(request._request)
 
-    # Estadísticas para el panel de préstamos del Administrador
+    def update(self, request, *args, **kwargs):
+        raise serializers.ValidationError('Usa acciones explícitas.')
+
+    def destroy(self, request, *args, **kwargs):
+        raise serializers.ValidationError('El historial de préstamos se conserva.')
+
     @action(detail=False, methods=['get'], url_path='estadisticas')
     def estadisticas(self, request):
+        """Estadísticas para el panel de préstamos del Administrador."""
         if not self._es_administrador(request.user):
             return Response(
                 {"error": "Acceso denegado. Solo administradores pueden ver estadísticas."},
@@ -549,17 +381,23 @@ class PrestamosViewSet(viewsets.ModelViewSet):
             "total": total
         }, status=status.HTTP_200_OK)
 
-    # Acción explícita para Aprobar préstamo
     @action(detail=True, methods=['post'], url_path='aprobar')
+    @transaction.atomic
     def aprobar(self, request, pk=None):
+        if settings.CATALOG_REMOTE_ENABLED:
+            from biblioteca_backend.migration_bridge import legacy_action
+            if not self._es_administrador(request.user):
+                return Response({'error':'Solo administradores.'}, status=403)
+            return Response(legacy_action(self.get_object().pk, 'aprobar'))
+        """Acción explícita para aprobar un préstamo (Solo Administradores)."""
         if not self._es_administrador(request.user):
             return Response(
                 {"error": "Acceso denegado. Solo administradores pueden aprobar préstamos."},
                 status=status.HTTP_403_FORBIDDEN
             )
-        prestamo = self.get_object()
+        prestamo = locked_legacy_loan(self.get_object().pk)
 
-        if prestamo.devuelto or prestamo.estado == 'aceptado':
+        if prestamo.devuelto or prestamo.estado != 'pendiente':
             return Response(
                 {"error": f"El préstamo #{prestamo.id} ya se encuentra aprobado o concluido."},
                 status=status.HTTP_400_BAD_REQUEST
@@ -609,7 +447,6 @@ class PrestamosViewSet(viewsets.ModelViewSet):
             libro.disponible = False
             libro.save()
 
-        print(f"[OK] Préstamo #{prestamo.id} aprobado para {prestamo.alumno.nombre} - Libro: {libro.titulo}")
         serializer = self.get_serializer(prestamo)
         return Response({
             "message": f"Préstamo #{prestamo.id} para '{libro.titulo}' aprobado exitosamente.",
@@ -617,15 +454,23 @@ class PrestamosViewSet(viewsets.ModelViewSet):
             "prestamo": serializer.data
         }, status=status.HTTP_200_OK)
 
-    # Acción explícita para Rechazar préstamo
     @action(detail=True, methods=['post'], url_path='rechazar')
+    @transaction.atomic
     def rechazar(self, request, pk=None):
+        if settings.CATALOG_REMOTE_ENABLED:
+            from biblioteca_backend.migration_bridge import legacy_action
+            if not self._es_administrador(request.user):
+                return Response({'error':'Solo administradores.'}, status=403)
+            return Response(legacy_action(self.get_object().pk, 'rechazar'))
+        """Acción explícita para rechazar un préstamo (Solo Administradores)."""
         if not self._es_administrador(request.user):
             return Response(
                 {"error": "Acceso denegado. Solo administradores pueden rechazar préstamos."},
                 status=status.HTTP_403_FORBIDDEN
             )
-        prestamo = self.get_object()
+        prestamo = locked_legacy_loan(self.get_object().pk)
+        if prestamo.estado != 'pendiente' or prestamo.devuelto:
+            raise serializers.ValidationError('Solo se rechazan solicitudes pendientes.')
         prestamo.estado = 'rechazado'
         prestamo.save()
 
@@ -637,7 +482,6 @@ class PrestamosViewSet(viewsets.ModelViewSet):
             libro.disponible = True
             libro.save()
 
-        print(f"[OK] Préstamo #{prestamo.id} rechazado para {prestamo.alumno.nombre}")
         serializer = self.get_serializer(prestamo)
         return Response({
             "message": f"Préstamo #{prestamo.id} para '{libro.titulo}' rechazado.",
@@ -645,9 +489,9 @@ class PrestamosViewSet(viewsets.ModelViewSet):
             "prestamo": serializer.data
         }, status=status.HTTP_200_OK)
 
-    # Acción genérica para compatibilidad: revisar_prestamo
     @action(detail=True, methods=['post'], url_path='revisar')
     def revisar_prestamo(self, request, pk=None):
+        """Acción genérica para compatibilidad: delega a aprobar o rechazar."""
         accion = request.data.get('accion')
         if accion == 'aprobar':
             return self.aprobar(request, pk)
@@ -659,16 +503,24 @@ class PrestamosViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-    # Acción explícita para registrar la devolución (Solo Administradores)
     @action(detail=True, methods=['post'], url_path='devolver')
+    @transaction.atomic
     def devolver(self, request, pk=None):
+        if settings.CATALOG_REMOTE_ENABLED:
+            from biblioteca_backend.migration_bridge import legacy_action
+            if not self._es_administrador(request.user):
+                return Response({'error':'Solo administradores.'}, status=403)
+            return Response(legacy_action(self.get_object().pk, 'devolver'))
+        """Acción explícita para registrar la devolución (Solo Administradores)."""
         if not self._es_administrador(request.user):
             return Response(
                 {"error": "Acceso denegado. Solo los administradores pueden registrar la devolución de un libro."},
                 status=status.HTTP_403_FORBIDDEN
             )
-        prestamo = self.get_object()
+        prestamo = locked_legacy_loan(self.get_object().pk)
 
+        if prestamo.estado != 'aceptado':
+            raise serializers.ValidationError('Solo se devuelven préstamos activos.')
         if prestamo.devuelto:
             return Response(
                 {"error": "Este préstamo ya fue registrado como devuelto anteriormente."},
@@ -681,7 +533,9 @@ class PrestamosViewSet(viewsets.ModelViewSet):
 
         # Marcar el libro disponible si hay copias libres
         libro = prestamo.libro
-        prestamos_activos_libro = Prestamos.objects.filter(libro=libro, devuelto=False, estado='aceptado').exclude(id=prestamo.id).count()
+        prestamos_activos_libro = Prestamos.objects.filter(
+            libro=libro, devuelto=False, estado='aceptado'
+        ).exclude(id=prestamo.id).count()
         total_copias = getattr(libro, 'total_ejemplares', 1) or 1
         copias_disponibles = max(0, total_copias - prestamos_activos_libro)
 
@@ -689,18 +543,19 @@ class PrestamosViewSet(viewsets.ModelViewSet):
             libro.disponible = True
             libro.save()
 
-        # Calcular métricas para el modal de Devolución registrada
+        # Calcular métricas de devolución y sanciones
         fecha_dev = prestamo.fecha_devolucion or timezone.now()
-        fecha_venc = prestamo.fecha_vencimiento or (prestamo.fecha_solicitud + timedelta(days=7) if prestamo.fecha_solicitud else fecha_dev)
+        fecha_venc = prestamo.fecha_vencimiento or (
+            prestamo.fecha_solicitud + timedelta(days=7) if prestamo.fecha_solicitud else fecha_dev
+        )
 
         dias_retraso = 0
         if fecha_dev and fecha_venc and fecha_dev.date() > fecha_venc.date():
             dias_retraso = (fecha_dev.date() - fecha_venc.date()).days
 
-        # Aplicación estricta de Reglas de Negocio:
-        # 1. Retraso 0: el modal solo dice "Devolución a tiempo, sin sanción" (sin multa, sin bloqueo).
-        # 2. 1 a 7 días: solo multa ($5.00 MXN por día, RN-03). Sin bloqueo.
-        # 3. Más de 7 días: multa ($5.00 MXN por día) + bloqueo de 15 días (RN-04).
+        # Reglas de negocio:
+        # RN-03: Retraso 1-7 días → multa ($5.00 MXN/día), sin bloqueo.
+        # RN-04: Retraso >7 días → multa + bloqueo de 15 días.
         if dias_retraso == 0:
             multa_formateada = "$0"
             bloqueo_texto = "------"
@@ -736,7 +591,6 @@ class PrestamosViewSet(viewsets.ModelViewSet):
             "stock_mensaje": mensaje_stock
         }
 
-        print(f"[OK] Devolución registrada para préstamo #{prestamo.id} - Libro: {libro.titulo} - Retraso: {dias_retraso} días")
         serializer = self.get_serializer(prestamo)
         return Response({
             "message": f"Devolución registrada exitosamente para '{libro.titulo}'.",
@@ -744,56 +598,34 @@ class PrestamosViewSet(viewsets.ModelViewSet):
             "detalles_devolucion": detalles_devolucion
         }, status=status.HTTP_200_OK)
 
-    # Actualización parcial protegida para devoluciones
     def partial_update(self, request, *args, **kwargs):
-        prestamo = self.get_object()
+        if request.data == {'devuelto': True}:
+            return self.devolver(request, kwargs.get('pk'))
+        raise serializers.ValidationError('Usa las acciones explícitas del préstamo.')
 
-        if 'devuelto' in request.data and request.data['devuelto']:
-            if not self._es_administrador(request.user):
-                return Response(
-                    {"error": "Acceso denegado. Solo los administradores pueden registrar la devolución de un libro."},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-            if prestamo.devuelto:
-                return Response(
-                    {"error": "Este préstamo ya fue registrado como devuelto anteriormente."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            prestamo.devuelto = True
-            prestamo.fecha_devolucion = timezone.now()
-            prestamo.save()
-
-            libro = prestamo.libro
-            prestamos_activos = Prestamos.objects.filter(libro=libro, devuelto=False, estado='aceptado').exclude(id=prestamo.id).count()
-            total_copias = getattr(libro, 'total_ejemplares', 1) or 1
-            if prestamos_activos < total_copias and not getattr(libro, 'baja', False):
-                libro.disponible = True
-                libro.save()
-
-            serializer = self.get_serializer(prestamo)
-            return Response(serializer.data)
-
-        return super().partial_update(request, *args, **kwargs)
 
 class SolicitarPrestamoView(generics.CreateAPIView):
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        if settings.CATALOG_REMOTE_ENABLED:
+            from biblioteca_backend.migration_bridge import project_book
+            bid = serializers.IntegerField(min_value=1).run_validation(request.data.get('libro'))
+            project_book(bid)
+        return super().create(request, *args, **kwargs)
+
     queryset = Prestamos.objects.all()
     serializer_class = PrestamosSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def perform_create(self, serializer):
         user = self.request.user
-        print(f"DEBUG perform_create - Usuario: {user.username}")
 
         try:
-            alumno = Alumnos.objects.get(user=user)
-            print(f"Alumno encontrado: {alumno.nombre}")
+            alumno = Alumnos.objects.select_for_update().get(user=user)
 
-            # 1. Regla RN-04: Validar si el alumno está bloqueado / suspendido por retraso > 7 días
+            # 1. Regla RN-04: Validar si el alumno está bloqueado por retraso > 7 días
             bloqueado, mensaje_bloqueo, fecha_desbloqueo = verificar_bloqueo_alumno(alumno)
             if bloqueado:
-                print(f"[BLOQUEO RN-04] Intento de préstamo denegado para {alumno.nombre} ({alumno.matricula}): {mensaje_bloqueo}")
                 raise serializers.ValidationError({
                     "error": mensaje_bloqueo,
                     "bloqueado": True,
@@ -813,7 +645,7 @@ class SolicitarPrestamoView(generics.CreateAPIView):
                     "error": f"El libro '{libro.titulo}' no está disponible actualmente para préstamo."
                 })
 
-            # Validar si ya tiene una solicitud pendiente o activa para el mismo libro
+            # 3. Validar si ya tiene una solicitud pendiente o activa para el mismo libro
             prestamo_existente = Prestamos.objects.filter(
                 alumno=alumno,
                 libro=libro,
@@ -825,10 +657,8 @@ class SolicitarPrestamoView(generics.CreateAPIView):
                 })
 
             serializer.save(alumno=alumno, estado='pendiente', devuelto=False)
-            print("[OK] Préstamo guardado exitosamente en estado pendiente")
 
         except Alumnos.DoesNotExist:
-            print("Error: Usuario no tiene perfil de alumno")
             raise serializers.ValidationError({
                 "error": "El usuario no está registrado como alumno"
             })

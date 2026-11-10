@@ -1,0 +1,32 @@
+map "${MAINTENANCE_MODE}:$request_method" $block_writes {
+    default 0;
+    ~^1:(POST|PUT|PATCH|DELETE)$ 1;
+}
+server {
+    listen 80;
+    server_name _;
+    resolver 127.0.0.11 valid=5s ipv6=off;
+    resolver_timeout 3s;
+    set $identity_backend ${IDENTITY_UPSTREAM};
+    set $books_backend ${BOOKS_UPSTREAM};
+    set $loans_backend ${LOANS_UPSTREAM};
+    set $fallback_backend ${FALLBACK_UPSTREAM};
+    if ($block_writes) { return 503; }
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # Never trust a caller-supplied internal credential on the public gateway.
+    proxy_set_header X-Service-Key "";
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 30s;
+    location = /internal { return 404; }
+    location ^~ /internal/ { return 404; }
+    location ~ ^/(token|custom-token|logout|validate|register|perfil|alumnos|usuarios)(/|$) {
+        proxy_pass http://$identity_backend;
+    }
+    location /admin/create/ { proxy_pass http://$identity_backend; }
+    location ~ ^/libros(/|$) { proxy_pass http://$books_backend; }
+    location ~ ^/(prestamos|solicitar-prestamo|operaciones)(/|$) { proxy_pass http://$loans_backend; }
+    location / { proxy_pass http://$fallback_backend; }
+}

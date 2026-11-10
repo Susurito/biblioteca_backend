@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "biblioteca.events.v1",
+  "title": "Mensajes de la Saga v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "message_id",
+    "saga_id",
+    "version",
+    "type",
+    "payload"
+  ],
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "saga_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "version": {
+      "const": 1
+    },
+    "type": {
+      "enum": [
+        "ReservarEjemplar",
+        "ConfirmarReserva",
+        "LiberarReserva",
+        "EjemplarReservado",
+        "ReservaRechazada",
+        "ReservaConfirmada",
+        "ConfirmacionRechazada",
+        "ReservaLiberada"
+      ]
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "prestamo_id",
+        "libro_id"
+      ],
+      "properties": {
+        "prestamo_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "libro_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reserva_saga_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "motivo": {
+          "type": "string"
+        },
+        "stock_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stock_disponibles": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

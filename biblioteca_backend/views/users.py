@@ -71,8 +71,10 @@ class UsuariosView(generics.CreateAPIView):
 
 
 # === Gestión de Administradores existentes ===
+from biblioteca_backend.permissions import AdminOnly
+
 class AdminView(generics.CreateAPIView):
-    permission_classes = (permissions.IsAuthenticated,)
+    permission_classes = (AdminOnly,)
 
     def get(self, request, *args, **kwargs):
         admin_id = request.GET.get("id")

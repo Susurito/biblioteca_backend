@@ -8,8 +8,6 @@ from django.contrib.auth import get_user_model
 from biblioteca_backend.models import Alumnos, Administradores
 from biblioteca_backend.serializers import AlumnoSerializer, UserSerializer
 
-
-
 User = get_user_model()
 
 
@@ -51,32 +49,8 @@ class CustomAuthToken(ObtainAuthToken):
         authenticated_user = None
         if user and user.check_password(password):
             authenticated_user = user
-        # authenticated_user = None
-        # if user:
-        #     if user.check_password(password):
-        #         authenticated_user = user
-        #     else:
-        #         # Contraseñas comunes de desarrollo para permitir acceso inmediato si se restableció
-        #         passwords_admin_comunes = [
-        #             'admi', 'admin', '1234', '12345', '123456', '12345678',
-        #             'admi123', 'admin123', 'Admin123', 'Admin123!', 'Admin1234', 'Admin1234!',
-        #             '202248698', 'password'
-        #         ]
-        #         es_admin = (
-        #             user.groups.filter(name__iexact='administrador').exists() or
-        #             user.is_superuser or
-        #             Administradores.objects.filter(user=user).exists()
-        #         )
-        #         if es_admin and password in passwords_admin_comunes:
-        #             user.set_password(password)
-        #             user.save()
-        #             authenticated_user = user
-        #         elif user.groups.filter(name__iexact='alumno').exists() and password in ['1234', '123456', '12345678', 'alumno', 'Alumno1234!', '202248699']:
-        #             user.set_password(password)
-        #             user.save()
-        #             authenticated_user = user
 
-        # 4. Fallback con autenticación nativa
+        # 4. Fallback con autenticación nativa de Django
         if not authenticated_user:
             from django.contrib.auth import authenticate
             authenticated_user = authenticate(request=request, username=username_or_email, password=password)

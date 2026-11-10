@@ -1,5 +1,7 @@
 # 📚 Biblioteca Backend API
 
+> **Estado local: migrado el 10/11/2026.** Página en [localhost:4200](http://localhost:4200/catalogo), gateway en [localhost:8080](http://localhost:8080). Consulte [MIGRACION_REAL.md](MIGRACION_REAL.md) para evidencias y arranque actual.
+
 API REST para un sistema de gestión de biblioteca escolar, desarrollada con **Django REST Framework** y desplegada con **Docker**.
 
 ---
@@ -253,115 +255,10 @@ Proyecto desarrollado para la materia de **Arquitectura de Software** — BUAP, 
 
 ---
 
-## 🏗️ Arquitectura de Microservicios
+## Arquitectura de microservicios
 
-El proyecto actualmente es un **monolito Django**. A continuación se documenta la arquitectura de microservicios usando el patrón **Strangler Fig**.
+La migración usa tres servicios: `svc-identidad` (8001), `svc-libros` (8003) y `svc-prestamos` (8004), cada uno con MySQL propio. Nginx expone 8080; préstamos orquesta la Saga con RabbitMQ, outbox e inbox.
 
-### Bounded Contexts Identificados
+En este workspace, `.env` activa Compose final y los tres servicios. En instalaciones nuevas, la configuración inicial conserva el monolito hasta importar y conciliar los datos. Los antiguos `svc-auth` y `svc-usuarios` se conservan como borradores fuera de Compose.
 
-```
-                         ┌─────────────────┐
-                         │  API GATEWAY    │  :8080
-                         │     (nginx)     │
-                         └────────┬────────┘
-                                  │
-              ┌───────────────────┼───────────────────┐
-              │                   │                   │           
-     ┌────────▼────────┐ ┌────────▼────────┐ ┌───────▼────────┐ ┌────────▼────────┐
-     │  1. svc-auth    │ │ 2. svc-usuarios │ │ 3. svc-libros  │ │4. svc-prestamos │
-     │     :8001       │ │     :8002       │ │    :8003       │ │     :8004       │
-     │                 │ │                 │ │                │ │                 │
-     │ • Login/Logout  │ │ • Alumnos CRUD  │ │ • Catálogo     │ │ • Solicitudes   │
-     │ • JWT/Token     │ │ • Admins CRUD   │ │ • Disponib.    │ │ • Aprobaciones  │
-     │ • Validar token │ │ • Perfil        │ │ • Storage GCS  │ │ • Devoluciones  │
-     │                 │ │ • Registro      │ │                │ │ • Multas/Bloqueo│
-     └────────┬────────┘ └────────┬────────┘ └───────┬────────┘ └────────┬────────┘
-              │                   │                   │                   │
-     ┌────────▼────────┐ ┌────────▼────────┐ ┌───────▼────────┐ ┌────────▼────────┐
-     │   MySQL:auth    │ │  MySQL:usuarios │ │  MySQL:libros  │ │ MySQL:prestamos │
-     └─────────────────┘ └─────────────────┘ └────────────────┘ └─────────────────┘
-```
-
-### Estructura de Directorios Objetivo
-
-```
-biblioteca_backend/                   ← Repositorio raíz
-├── .env
-├── .env.example
-├── .gitignore
-├── docker-compose.yml                ← Orquesta todos los servicios
-├── README.md
-│
-├── nginx/
-│   └── nginx.conf                    ← API Gateway / reverse proxy
-│
-└── services/
-    ├── svc-auth/                     ← Microservicio 1: Autenticación
-    │   ├── Dockerfile
-    │   ├── requirements.txt
-    │   ├── manage.py
-    │   └── auth_service/
-    │       ├── settings.py
-    │       ├── urls.py
-    │       └── views/
-    │           └── auth.py           ← CustomAuthToken, Logout
-    │
-    ├── svc-usuarios/                 ← Microservicio 2: Usuarios y Alumnos
-    │   ├── Dockerfile
-    │   ├── requirements.txt
-    │   ├── manage.py
-    │   └── usuarios_service/
-    │       ├── models.py             (Alumnos, Administradores)
-    │       ├── serializers.py
-    │       ├── urls.py
-    │       └── views/
-    │           ├── users.py
-    │           └── alumnos.py
-    │
-    ├── svc-libros/                   ← Microservicio 3: Catálogo de Libros
-    │   ├── Dockerfile
-    │   ├── requirements.txt
-    │   ├── manage.py
-    │   └── libros_service/
-    │       ├── models.py             (Libros)
-    │       ├── serializers.py
-    │       ├── urls.py
-    │       ├── views/
-    │       │   └── libros.py         ← LibrosViewSet
-    │       └── file_storage/         ← Integración Google Cloud Storage
-    │
-    └── svc-prestamos/                ← Microservicio 4: Préstamos (el más complejo)
-        ├── Dockerfile
-        ├── requirements.txt
-        ├── manage.py
-        └── prestamos_service/
-            ├── models.py             (Prestamos — FK reemplazadas por IntegerField)
-            ├── serializers.py
-            ├── urls.py
-            ├── views/
-            │   └── prestamos.py      ← PrestamosViewSet, SolicitarPrestamoView
-            └── business/
-                └── reglas.py         ← verificar_bloqueo_alumno (Regla RN-04)
-```
-
-### Tabla de Microservicios
-
-| # | Servicio | Puerto | Extrae de (monolito) | BD propia |
-|---|----------|--------|----------------------|-----------|
-| 1 | `svc-auth` | 8001 | `views/auth.py` | `auth_db` |
-| 2 | `svc-usuarios` | 8002 | `views/users.py` + `views/alumnos.py` | `usuarios_db` |
-| 3 | `svc-libros` | 8003 | `LibrosViewSet` + `file_storage/` | `libros_db` |
-| 4 | `svc-prestamos` | 8004 | `PrestamosViewSet` + lógica RN-04 | `prestamos_db` |
-
-### Roadmap de Migración (Patrón Strangler Fig)
-
-| Fase | Descripción | Estado |
-|------|-------------|--------|
-| **Fase 0** | Limpieza del monolito: eliminar código comentado, consolidar serializers duplicados | 🔵 Pendiente |
-| **Fase 1** | Extraer `svc-auth` + configurar nginx como API Gateway | 🔵 Pendiente |
-| **Fase 2** | Extraer `svc-usuarios` (Alumnos, Administradores, Perfil) | 🔵 Pendiente |
-| **Fase 3** | Extraer `svc-libros` (Catálogo + GCS) | 🔵 Pendiente |
-| **Fase 4** | Extraer `svc-prestamos` (Préstamos + RN-04 + patrón Saga) | 🔵 Pendiente |
-| **Fase 5** | Retirar el monolito original | 🔵 Pendiente |
-
-> **Nota académica:** Para el alcance de la materia, implementar hasta la **Fase 2** (svc-auth + svc-usuarios con nginx) es suficiente para demostrar dominio de la arquitectura de microservicios.
+Consulta [MIGRACION.md](MIGRACION.md) para la transferencia por fases, comandos de pruebas y retiro del monolito; [contracts/README.md](contracts/README.md) documenta APIs y eventos. Los comandos anteriores de este README describen el despliegue heredado.

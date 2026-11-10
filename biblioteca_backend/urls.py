@@ -14,7 +14,12 @@ router.register(r'libros', LibrosViewSet, basename='libros')
 router.register(r'prestamos', PrestamosViewSet, basename='prestamos')
 router.register(r'usuarios', UsuariosViewSet, basename='usuarios')
 
+from biblioteca_backend.migration_bridge import Resumenes, Historial, Pago
+
 urlpatterns = [
+    path("internal/resumenes/", Resumenes.as_view()),
+    path("internal/historial/", Historial.as_view()),
+    path("internal/pagar-multa/", Pago.as_view()),
     # Version
     path('bootstrap/version', bootstrap.VersionView.as_view()),
 
